@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Morse Code Encoder & Decoder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Add the circle overlay for the decoder */
+        .circle-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100px;
+            height: 100px;
+            border: 2px solid cyan;
+            border-radius: 50%;
+            pointer-events: none;
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+        }
+        #videoElement {
+            position: relative;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center justify-center p-4">
+
+    <!-- Navigation buttons to switch between Encoder and Decoder -->
+    <div class="flex space-x-4 mb-6">
+        <button id="showEncoder" class="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600">
+            Encoder
+        </button>
+        <button id="showDecoder" class="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600">
+            Decoder
+        </button>
+    </div>
+
+    <!-- Container for Encoder -->
+    <div id="encoderContainer" class="bg-white shadow-lg rounded-lg p-6 w-full max-w-xl mb-6">
+        <h1 class="text-2xl font-bold mb-4 text-center">Morse Code Encoder</h1>
+        
+        <div class="mb-4">
+            <label class="block text-gray-700 font-medium mb-2" for="textInput">Enter Text</label>
+            <textarea id="textInput" 
+                      class="w-full p-2 border rounded bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:outline-none" 
+                      rows="4" placeholder="Type your message here..."></textarea>
+        </div>
+
+        <div class="mb-4">
+            <label class="block text-gray-700 font-medium mb-2" for="dotDurationSlider">Set Dot Duration (ms)</label>
+            <input id="dotDurationSlider" type="range" min="100" max="1000" step="50" value="200" class="w-full" />
+            <p id="dotDurationValue" class="text-center">Dot Duration: 200 ms</p>
+        </div>
+
+        <div class="mb-4">
+            <label class="block text-gray-700 font-medium mb-2" for="dashDurationSlider">Set Dash Duration (ms)</label>
+            <input id="dashDurationSlider" type="range" min="100" max="1000" step="50" value="600" class="w-full" />
+            <p id="dashDurationValue" class="text-center">Dash Duration: 600 ms</p>
+        </div>
+
+        <div class="flex space-x-2">
+            <button id="playBtn" 
+                    class="flex-1 bg-green-500 text-white py-2 rounded hover:bg-green-600">
+                Play Morse Code
+            </button>
+            <button id="clearBtn" 
+                    class="flex-1 bg-red-500 text-white py-2 rounded hover:bg-red-600">
+                Clear
+            </button>
+        </div>
+    </div>
+
+    <!-- Container for Decoder -->
+    <div id="decoderContainer" class="bg-white shadow-lg rounded-lg p-6 w-full max-w-xl hidden">
+        <h1 class="text-2xl font-bold mb-4 text-center">Morse Code Decoder</h1>
+
+        <div class="relative mb-4">
+            <video id="videoElement" class="w-full bg-black rounded" autoplay></video>
+            <div class="circle-overlay"></div>
+        </div>
+
+        <div class="mb-4">
+            <label class="block text-gray-700 mb-2">Brightness Threshold</label>
+            <input type="range" id="brightnessThreshold" 
+                   class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                   min="0" max="255" value="240">
+        </div>
+
+        <div class="mb-4">
+            <label class="block text-gray-700 mb-2">Area Threshold</label>
+            <input type="range" id="areaThreshold" 
+                   class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                   min="0" max="1000" value="300">
+        </div>
+
+        <div class="mb-4">
+            <h2 class="text-lg font-semibold mb-2">Current Status</h2>
+            <div id="statusDisplay" 
+                 class="p-2 rounded bg-gray-100 text-center font-mono">
+                No Flash Detected
+            </div>
+        </div>
+
+        <div class="mb-4">
+            <h2 class="text-lg font-semibold mb-2">Decoded Text</h2>
+            <textarea id="decodedText" 
+                      class="w-full p-2 border rounded bg-gray-50 resize-none" 
+                      rows="4" readonly></textarea>
+        </div>
+
+        <div class="flex space-x-2">
+            <button id="startBtn" 
+                    class="flex-1 bg-blue-500 text-white py-2 rounded hover:bg-blue-600">
+                Start Detection
+            </button>
+            <button id="stopBtn" 
+                    class="flex-1 bg-red-500 text-white py-2 rounded hover:bg-red-600">
+                Stop Detection
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Morse Code Encoder functionality
+        const morseCodeDict = {
+            'A': '.-', 'B': '-...', 'C': '-.-.', 'D': '-..', 'E': '.', 
+            'F': '..-.', 'G': '--.', 'H': '....', 'I': '..', 'J': '.---', 
+            'K': '-.-', 'L': '.-..', 'M': '--', 'N': '-.', 'O': '---', 
+            'P': '.--.', 'Q': '--.-', 'R': '.-.', 'S': '...', 'T': '-', 
+            'U': '..-', 'V': '...-', 'W': '.--', 'X': '-..-', 'Y': '-.--', 
+            'Z': '--..', '1': '.----', '2': '..---', '3': '...--', '4': '....-', 
+            '5': '.....', '6': '-....', '7': '--...', '8': '---..', '9': '----.', 
+            '0': '-----', ' ': '/'
+        };
+
+        let dotDuration = 200;
+        let dashDuration = 600;
+
+        document.getElementById('dotDurationSlider').addEventListener('input', function () {
+            dotDuration = this.value;
+            document.getElementById('dotDurationValue').textContent = `Dot Duration: ${dotDuration} ms`;
+        });
+
+        document.getElementById('dashDurationSlider').addEventListener('input', function () {
+            dashDuration = this.value;
+            document.getElementById('dashDurationValue').textContent = `Dash Duration: ${dashDuration} ms`;
+        });
+
+        document.getElementById('playBtn').addEventListener('click', () => {
+            const textInput = document.getElementById('textInput').value.toUpperCase();
+            const morseCode = textInput
+                .split('')
+                .map(char => morseCodeDict[char] || '?')
+                .join(' ');
+            playMorseCode(morseCode);
+        });
+
+        function playMorseCode(morseCode) {
+            const mainBody = document.body;
+            let index = 0;
+
+            function toggleScreen(color) {
+                mainBody.style.backgroundColor = color;
+            }
+
+            function playNext() {
+                if (index >= morseCode.length) {
+                    return;
+                }
+
+                const char = morseCode[index];
+                if (char === '.') {
+                    toggleScreen('white');
+                    setTimeout(() => {
+                        toggleScreen('black');
+                        setTimeout(playNext, dotDuration);
+                    }, dotDuration);
+                } else if (char === '-') {
+                    toggleScreen('white');
+                    setTimeout(() => {
+                        toggleScreen('black');
+                        setTimeout(playNext, dashDuration);
+                    }, dashDuration);
+                } else if (char === ' ') {
+                    setTimeout(playNext, dashDuration);
+                }
+                index++;
+            }
+            playNext();
+        }
+
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            document.getElementById('textInput').value = '';
+        });
+
+        // Morse Code Decoder functionality
+        class MorseCodeDetector {
+            constructor() {
+                this.video = document.getElementById('videoElement');
+                this.canvas = document.createElement('canvas');
+                this.context = this.canvas.getContext('2d');
+                this.isDetecting = false;
+                this.videoStream = null;
+                this.brightnessThreshold = 240;
+                this.areaThreshold = 300;
+                this.detectedMorse = '';
+            }
+
+            startDetection() {
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    navigator.mediaDevices.getUserMedia({ video: true })
+                        .then(stream => {
+                            this.videoStream = stream;
+                            this.video.srcObject = stream;
+                            this.isDetecting = true;
+                            this.processFrame();
+                        }).catch(err => console.log("Camera permission denied", err));
+                }
+            }
+
+            stopDetection() {
+                if (this.videoStream) {
+                    this.videoStream.getTracks().forEach(track => track.stop());
+                }
+                this.isDetecting = false;
+            }
+
+            processFrame() {
+                if (!this.isDetecting) return;
+
+                this.context.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
+                const imageData = this.context.getImageData(0, 0, this.canvas.width, this.canvas.height);
+                const pixels = imageData.data;
+                let brightPixels = 0;
+                let area = 0;
+
+                // Analyze brightness
+                for (let i = 0; i < pixels.length; i += 4) {
+                    const r = pixels[i];
+                    const g = pixels[i + 1];
+                    const b = pixels[i + 2];
+                    const brightness = (r + g + b) / 3;
+
+                    if (brightness > this.brightnessThreshold) {
+                        brightPixels++;
+                    }
+                }
+
+                // Calculate the area of bright pixels
+                area = brightPixels / (this.canvas.width * this.canvas.height);
+
+                if (area > this.areaThreshold) {
+                    document.getElementById('statusDisplay').textContent = "Flash Detected";
+                } else {
+                    document.getElementById('statusDisplay').textContent = "No Flash Detected";
+                }
+
+                if (this.isDetecting) {
+                    requestAnimationFrame(() => this.processFrame());
+                }
+            }
+        }
+
+        const detector = new MorseCodeDetector();
+
+        document.getElementById('startBtn').addEventListener('click', () => {
+            detector.startDetection();
+        });
+
+        document.getElementById('stopBtn').addEventListener('click', () => {
+            detector.stopDetection();
+        });
+
+        // Toggling between Encoder and Decoder
+        document.getElementById('showEncoder').addEventListener('click', () => {
+            document.getElementById('encoderContainer').classList.remove('hidden');
+            document.getElementById('decoderContainer').classList.add('hidden');
+        });
+
+        document.getElementById('showDecoder').addEventListener('click', () => {
+            document.getElementById('decoderContainer').classList.remove('hidden');
+            document.getElementById('encoderContainer').classList.add('hidden');
+        });
+    </script>
+</body>
+</html>
